@@ -1,0 +1,10 @@
+[package]
+name = "event-scraper"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+lambda_http = "0.11.1"
+reqwest = "0.12.4"
+scraper = "0.19.0"
+tokio = { version = "1", features = ["macros"] }
