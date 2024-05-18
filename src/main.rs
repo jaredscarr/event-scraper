@@ -1,12 +1,13 @@
-use std::ops::Add;
 use scraper::{Html, Selector, ElementRef};
-use lambda_http::{run, service_fn, tracing, Body, Error, Request, RequestExt, Response};
-use scraper::html::Select;
+use lambda_http::{run, service_fn, tracing, Body, Error, Request, Response};
+use serde::Serialize;
+use serde_json;
+
 
 // This is the main body for the function.
 // Write your code inside it.
 
-#[derive(Clone, Debug)]
+#[derive(Serialize, Clone, Debug)]
 struct Event {
     date: String,
     headliner: String,
@@ -54,21 +55,14 @@ async fn function_handler(event: Request) -> Result<Response<Body>, Error> {
         };
         event_vec.push(new_event);
     }
-    println!("{event_vec:?}");
 
-    // Extract some useful information from the request
-    let who = event
-        .query_string_parameters_ref()
-        .and_then(|params| params.first("name"))
-        .unwrap_or("world");
-    let message = format!("Hello {who}, this is an AWS Lambda HTTP request");
-
+    let json_message = serde_json::to_string(&event_vec).unwrap();
     // Return something that implements IntoResponse.
     // It will be serialized to the right response event automatically by the runtime
     let resp = Response::builder()
         .status(200)
-        .header("content-type", "text/html")// TODO: switch to json
-        .body(message.into())
+        .header("content-type", "application/json")
+        .body(json_message.into())
         .map_err(Box::new)?;
     Ok(resp)
 }
