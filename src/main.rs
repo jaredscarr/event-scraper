@@ -23,7 +23,7 @@ fn get_string_from_selector(selector: String, document: &ElementRef) -> String {
     option.unwrap_or_else(|| String::from(""))
 }
 
-async fn function_handler(event: Request) -> Result<Response<Body>, Error> {
+async fn function_handler(_event: Request) -> Result<Response<Body>, Error> {
     // TODO: create a handler that will scrape based on the date. If the date hasn't changed don't run again
     let response = reqwest::get(
         "https://elcorazonseattle.com/",
