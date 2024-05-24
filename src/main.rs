@@ -1,4 +1,4 @@
-use lambda_http::{run, service_fn, tracing, Body, Error, Request, Response};
+use lambda_http::{run, service_fn, tracing, Body, Error, Request, Response, RequestExt};
 use scraper::{ElementRef, Html, Selector};
 use serde::Serialize;
 
@@ -31,8 +31,7 @@ fn get_string_from_attr(selector: String, document: &ElementRef, attribute: Stri
     option.unwrap_or_else(|| "".into()).to_owned()
 }
 
-async fn function_handler(_event: Request) -> Result<Response<Body>, Error> {
-    // println!("{_event:?}");
+async fn get_corazon_events() -> Result<Response<Body>, Error> {
     let response = reqwest::get("https://elcorazonseattle.com/")
         .await?
         .text()
@@ -40,7 +39,6 @@ async fn function_handler(_event: Request) -> Result<Response<Body>, Error> {
 
     // grap one selector to get how many events are there
     let document = Html::parse_document(&response);
-    // let event_content = Selector::parse("div.event-info-block").unwrap();
     let event_content = Selector::parse("div.seetickets-list-event-container").unwrap();
     let mut event_vec: Vec<Event> = Vec::new();
 
@@ -74,6 +72,73 @@ async fn function_handler(_event: Request) -> Result<Response<Body>, Error> {
         .header("content-type", "application/json")
         .body(json_message.into())
         .map_err(Box::new)?;
+    Ok(resp)
+}
+
+async fn get_cafe_racer_events() -> Result<Response<Body>, Error> {
+    let response = reqwest::get("https://caferacer.wpengine.com/#/events")
+        .await?
+        .text()
+        .await?;
+
+    // grap one selector to get how many events are there
+    let document = Html::parse_document(&response);
+    let event_content = Selector::parse("div.event-card").unwrap();
+    let mut event_vec: Vec<Event> = Vec::new();
+
+    for event in document.select(&event_content) {
+        let date = get_string_from_selector("div.date".into(), &event);
+        let headliner = get_string_from_selector("div.event-name".into(), &event);
+        // let url = get_string_from_attr("p.event-title > a".into(), &event, "href".into());
+        // TODO: continue to search for ways to find the id of the modal and provide that url
+        let url = "https://caferacer.wpengine.com/#/events".into();
+        let support_talent = get_string_from_selector("div.support".into(), &event);
+        let showtime = get_string_from_selector("span.time".into(), &event);
+        let venue = "Cafe Racer".into();
+        let age = get_string_from_selector("div.age-caption".into(), &event);
+
+        let new_event = Event {
+            date,
+            headliner,
+            url,
+            support_talent,
+            showtime,
+            venue,
+            age,
+        };
+        event_vec.push(new_event);
+    }
+
+
+    let json_message = serde_json::to_string(&event_vec).unwrap();
+    // Return something that implements IntoResponse.
+    // It will be serialized to the right response event automatically by the runtime
+    let resp = Response::builder()
+        .status(200)
+        .header("content-type", "application/json")
+        .body(json_message.into())
+        .map_err(Box::new)?;
+    Ok(resp)
+}
+
+fn not_found() -> Result<Response<Body>, Error> {
+    let resp = Response::builder()
+        .status(400)
+        .header("content-type", "application/json")
+        .body("Resource Not Found".into())
+        .map_err(Box::new)?;
+    Ok(resp)
+}
+
+async fn function_handler(_event: Request) -> Result<Response<Body>, Error> {
+    let uri = _event.query_string_parameters();
+    let integration = uri.first("integration").unwrap_or("");
+
+    let resp = match integration {
+        "corazon" => get_corazon_events().await?,
+        "cafe_racer" => get_cafe_racer_events().await?,
+        _ => not_found()?,
+    };
     Ok(resp)
 }
 
