@@ -75,27 +75,24 @@ async fn get_corazon_events() -> Result<Response<Body>, Error> {
     Ok(resp)
 }
 
-async fn get_cafe_racer_events() -> Result<Response<Body>, Error> {
-    let response = reqwest::get("https://caferacer.wpengine.com/#/events")
+async fn get_barboza_events() -> Result<Response<Body>, Error> {
+    let response = reqwest::get("https://www.thebarboza.com/events")
         .await?
         .text()
         .await?;
-
     // grap one selector to get how many events are there
     let document = Html::parse_document(&response);
-    let event_content = Selector::parse("div.event-card").unwrap();
+    let event_content = Selector::parse("div.eventItem").unwrap();
     let mut event_vec: Vec<Event> = Vec::new();
 
     for event in document.select(&event_content) {
         let date = get_string_from_selector("div.date".into(), &event);
-        let headliner = get_string_from_selector("div.event-name".into(), &event);
-        // let url = get_string_from_attr("p.event-title > a".into(), &event, "href".into());
-        // TODO: continue to search for ways to find the id of the modal and provide that url
-        let url = "https://caferacer.wpengine.com/#/events".into();
-        let support_talent = get_string_from_selector("div.support".into(), &event);
-        let showtime = get_string_from_selector("span.time".into(), &event);
-        let venue = "Cafe Racer".into();
-        let age = get_string_from_selector("div.age-caption".into(), &event);
+        let headliner = get_string_from_selector("h3.title".into(), &event);
+        let url = get_string_from_attr("h3.title > a".into(), &event, "href".into());
+        let support_talent = get_string_from_selector("h4.tagline".into(), &event);
+        let showtime = get_string_from_selector("div.time".into(), &event);
+        let venue = "Barboza".into();
+        let age = get_string_from_selector("div.age".into(), &event);
 
         let new_event = Event {
             date,
@@ -109,7 +106,7 @@ async fn get_cafe_racer_events() -> Result<Response<Body>, Error> {
         event_vec.push(new_event);
     }
 
-
+    println!("{event_vec:?}");
     let json_message = serde_json::to_string(&event_vec).unwrap();
     // Return something that implements IntoResponse.
     // It will be serialized to the right response event automatically by the runtime
@@ -136,7 +133,7 @@ async fn function_handler(_event: Request) -> Result<Response<Body>, Error> {
 
     let resp = match integration {
         "corazon" => get_corazon_events().await?,
-        "cafe_racer" => get_cafe_racer_events().await?,
+        "barboza" => get_barboza_events().await?,
         _ => not_found()?,
     };
     Ok(resp)
