@@ -106,7 +106,59 @@ async fn get_barboza_events() -> Result<Response<Body>, Error> {
         event_vec.push(new_event);
     }
 
-    println!("{event_vec:?}");
+    let json_message = serde_json::to_string(&event_vec).unwrap();
+    // Return something that implements IntoResponse.
+    // It will be serialized to the right response event automatically by the runtime
+    let resp = Response::builder()
+        .status(200)
+        .header("content-type", "application/json")
+        .body(json_message.into())
+        .map_err(Box::new)?;
+    Ok(resp)
+}
+
+async fn get_showbox_events() -> Result<Response<Body>, Error> {
+    // grap one selector to get how many events are there
+    let mut event_vec: Vec<Event> = vec![];
+    // Block to drop the response and document at the end of the block
+    {
+        let response = reqwest::get("https://www.showboxpresents.com/events/all")
+            .await?
+            .text()
+            .await?;
+        let document = Html::parse_document(&response);
+        let event_content = Selector::parse("div.entry").unwrap();
+
+        for event in document.select(&event_content) {
+            let new_event = Event {
+                date: get_string_from_selector("span.date".into(), &event),
+                headliner: "".into(),
+                url: get_string_from_attr("div.thumb > a".into(), &event, "href".into()),
+                support_talent: "".into(),
+                showtime: get_string_from_selector("span.time".into(), &event).split('\t').last().unwrap_or_else(|| "").into(),
+                venue: get_string_from_selector("span.venue".into(), &event),
+                age: "".into(),
+            };
+            event_vec.push(new_event);
+        }
+    }
+
+    for e in &mut event_vec {
+        println!("{e:?}");
+        let response = reqwest::get(&e.url)
+            .await?
+            .text()
+            .await?;
+        let document = Html::parse_document(&response);
+        let event_content = Selector::parse("div.event_detail").unwrap();
+
+        for event in document.select(&event_content) {
+            e.headliner = get_string_from_selector("div.page_header_left > h1".into(), &event);
+            e.support_talent = get_string_from_selector("div.page_header_left > h4".into(), &event);
+            e.age = get_string_from_selector("div.age_res".into(), &event);
+        }
+    }
+
     let json_message = serde_json::to_string(&event_vec).unwrap();
     // Return something that implements IntoResponse.
     // It will be serialized to the right response event automatically by the runtime
@@ -134,6 +186,7 @@ async fn function_handler(_event: Request) -> Result<Response<Body>, Error> {
     let resp = match integration {
         "corazon" => get_corazon_events().await?,
         "barboza" => get_barboza_events().await?,
+        "showbox" => get_showbox_events().await?,
         _ => not_found()?,
     };
     Ok(resp)
