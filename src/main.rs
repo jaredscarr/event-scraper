@@ -1,9 +1,11 @@
 use lambda_http::{run, service_fn, tracing, Body, Error, Request, Response, RequestExt};
 use scraper::{ElementRef, Html, Selector};
 use serde::Serialize;
-
+use futures::{stream, StreamExt};
 // This is the main body for the function.
 // Write your code inside it.
+
+const PARALLEL_REQUESTS: usize = 2;
 
 #[derive(Serialize, Clone, Debug)]
 struct Event {
@@ -120,42 +122,61 @@ async fn get_barboza_events() -> Result<Response<Body>, Error> {
 async fn get_showbox_events() -> Result<Response<Body>, Error> {
     // grap one selector to get how many events are there
     let mut event_vec: Vec<Event> = vec![];
+    let client = reqwest::Client::new();
     // Block to drop the response and document at the end of the block
     {
-        let response = reqwest::get("https://www.showboxpresents.com/events/all")
+        let response = client.get("https://www.showboxpresents.com/events/all")
+            .send()
             .await?
             .text()
             .await?;
         let document = Html::parse_document(&response);
         let event_content = Selector::parse("div.entry").unwrap();
 
-        for event in document.select(&event_content) {
+        for el in document.select(&event_content) {
             let new_event = Event {
-                date: get_string_from_selector("span.date".into(), &event),
+                date: get_string_from_selector("span.date".into(), &el),
                 headliner: "".into(),
-                url: get_string_from_attr("div.thumb > a".into(), &event, "href".into()),
+                url: get_string_from_attr("div.thumb > a".into(), &el, "href".into()),
                 support_talent: "".into(),
-                showtime: get_string_from_selector("span.time".into(), &event).split('\t').last().unwrap_or_else(|| "").into(),
-                venue: get_string_from_selector("span.venue".into(), &event),
+                showtime: get_string_from_selector("span.time".into(), &el).split('\t').last().unwrap_or_else(|| "").into(),
+                venue: get_string_from_selector("span.venue".into(), &el),
                 age: "".into(),
             };
             event_vec.push(new_event);
         }
     }
 
-    for e in &mut event_vec {
-        println!("{e:?}");
-        let response = reqwest::get(&e.url)
-            .await?
-            .text()
-            .await?;
-        let document = Html::parse_document(&response);
-        let event_content = Selector::parse("div.event_detail").unwrap();
+    let responses = stream::iter(event_vec.clone()).map(|event| {
+        let client = client.clone();
+        tokio::spawn(async move {
+            let resp = client.get(event.url)
+                .send().await
+                .expect("Failed to send request")
+                .text()
+                .await;
+            resp
+        })
+    })
+        .buffer_unordered(PARALLEL_REQUESTS)
+        .collect::<Vec<_>>()
+        .await;
 
-        for event in document.select(&event_content) {
-            e.headliner = get_string_from_selector("div.page_header_left > h1".into(), &event);
-            e.support_talent = get_string_from_selector("div.page_header_left > h4".into(), &event);
-            e.age = get_string_from_selector("div.age_res".into(), &event);
+    for i in 0 .. responses.len() {
+        let res = &responses[i];
+        let event = &mut event_vec[i];
+        match res {
+            Ok(Ok(res)) => {
+                let document = Html::parse_document(&res);
+                let event_content = Selector::parse("div.event_detail").unwrap();
+                for el in document.select(&event_content) {
+                    event.headliner = get_string_from_selector("div.page_header_left > h1".into(), &el);
+                    event.support_talent = get_string_from_selector("div.page_header_left > h4".into(), &el);
+                    event.age = get_string_from_selector("div.age_res".into(), &el);
+                }
+            },
+            Ok(Err(e)) => println!("Got a reqwest::Error: {}", e),
+            Err(e) => println!("Got a tokio::JoinError: {}", e),
         }
     }
 
@@ -182,6 +203,7 @@ fn not_found() -> Result<Response<Body>, Error> {
 async fn function_handler(_event: Request) -> Result<Response<Body>, Error> {
     let uri = _event.query_string_parameters();
     let integration = uri.first("integration").unwrap_or("");
+    let integration= "showbox";
 
     let resp = match integration {
         "corazon" => get_corazon_events().await?,
