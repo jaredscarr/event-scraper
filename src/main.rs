@@ -133,7 +133,10 @@ async fn get_showbox_events() -> Result<Response<Body>, Error> {
         let document = Html::parse_document(&response);
         let event_content = Selector::parse("div.entry").unwrap();
 
-        for el in document.select(&event_content) {
+        for (i, el) in document.select(&event_content).enumerate() {
+            if i == 30 {
+                break;
+            }
             let new_event = Event {
                 date: get_string_from_selector("span.date".into(), &el),
                 headliner: "".into(),
