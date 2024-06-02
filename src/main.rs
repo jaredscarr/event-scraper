@@ -45,7 +45,9 @@ async fn get_corazon_events() -> Result<Response<Body>, Error> {
     let mut event_vec: Vec<Event> = Vec::new();
 
     for event in document.select(&event_content) {
-        let date = get_string_from_selector("p.event-date".into(), &event);
+        let mut date = get_string_from_selector("p.event-date".into(), &event);
+        let date_vec = date.split(" ").collect::<Vec<_>>();;
+        date = date_vec[1..3].join(" ");
         let headliner = get_string_from_selector("p.headliners".into(), &event);
         let url = get_string_from_attr("p.event-title > a".into(), &event, "href".into());
         let support_talent = get_string_from_selector("p.supporting-talent".into(), &event);
@@ -132,13 +134,17 @@ async fn get_showbox_events() -> Result<Response<Body>, Error> {
             .await?;
         let document = Html::parse_document(&response);
         let event_content = Selector::parse("div.entry").unwrap();
-
+        // TODO: consider refactor into iterator pattern with take 30 instead of break
         for (i, el) in document.select(&event_content).enumerate() {
             if i == 30 {
                 break;
             }
+            let mut date = get_string_from_selector("span.date".into(), &el);
+            let date_vec = date.split(",").collect::<Vec<_>>();
+            date = date_vec[1].trim().into();
+            println!("Date: {}", date);
             let new_event = Event {
-                date: get_string_from_selector("span.date".into(), &el),
+                date: date,
                 headliner: "".into(),
                 url: get_string_from_attr("div.thumb > a".into(), &el, "href".into()),
                 support_talent: "".into(),
@@ -165,7 +171,7 @@ async fn get_showbox_events() -> Result<Response<Body>, Error> {
         .collect::<Vec<_>>()
         .await;
 
-    for i in 0 .. responses.len() {
+    for i in 0..responses.len() {
         let res = &responses[i];
         let event = &mut event_vec[i];
         match res {
@@ -177,7 +183,7 @@ async fn get_showbox_events() -> Result<Response<Body>, Error> {
                     event.support_talent = get_string_from_selector("div.page_header_left > h4".into(), &el);
                     event.age = get_string_from_selector("div.age_res".into(), &el);
                 }
-            },
+            }
             Ok(Err(e)) => println!("Got a reqwest::Error: {}", e),
             Err(e) => println!("Got a tokio::JoinError: {}", e),
         }
@@ -206,6 +212,7 @@ fn not_found() -> Result<Response<Body>, Error> {
 async fn function_handler(_event: Request) -> Result<Response<Body>, Error> {
     let uri = _event.query_string_parameters();
     let integration = uri.first("integration").unwrap_or("");
+    let integration= "showbox";
 
     let resp = match integration {
         "corazon" => get_corazon_events().await?,
