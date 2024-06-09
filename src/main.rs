@@ -2,6 +2,8 @@ use lambda_http::{run, service_fn, tracing, Body, Error, Request, Response, Requ
 use scraper::{ElementRef, Html, Selector};
 use serde::Serialize;
 use futures::{stream, StreamExt};
+use std::collections::HashMap;
+
 // This is the main body for the function.
 // Write your code inside it.
 
@@ -33,7 +35,7 @@ fn get_string_from_attr(selector: String, document: &ElementRef, attribute: Stri
     option.unwrap_or_else(|| "".into()).to_owned()
 }
 
-async fn get_corazon_events() -> Result<Response<Body>, Error> {
+async fn get_corazon_events(month_lookup: HashMap<&str, &str>) -> Result<Response<Body>, Error> {
     let response = reqwest::get("https://elcorazonseattle.com/")
         .await?
         .text()
@@ -46,8 +48,14 @@ async fn get_corazon_events() -> Result<Response<Body>, Error> {
 
     for event in document.select(&event_content) {
         let mut date = get_string_from_selector("p.event-date".into(), &event);
-        let date_vec = date.split(" ").collect::<Vec<_>>();;
-        date = date_vec[1..3].join(" ");
+        let date_vec = date.trim().split(" ").collect::<Vec<_>>();
+        // TODO: temp hack to insert the year. Will need to revisit soon to implement hitting each event page like showbox
+        // and grabbing the year month and day there.
+        let year: String = "2024".into();
+        let month = date_vec[1].to_lowercase();
+        let month_num = month_lookup.get(&month as &str).unwrap_or(&"");
+        let day: String = date_vec[2].into();
+        date = format!("{year}-{month_num}-{day}");
         let headliner = get_string_from_selector("p.headliners".into(), &event);
         let url = get_string_from_attr("p.event-title > a".into(), &event, "href".into());
         let support_talent = get_string_from_selector("p.supporting-talent".into(), &event);
@@ -79,7 +87,7 @@ async fn get_corazon_events() -> Result<Response<Body>, Error> {
     Ok(resp)
 }
 
-async fn get_barboza_events() -> Result<Response<Body>, Error> {
+async fn get_barboza_events(month_lookup: HashMap<&str, &str>) -> Result<Response<Body>, Error> {
     let response = reqwest::get("https://www.thebarboza.com/events")
         .await?
         .text()
@@ -90,7 +98,14 @@ async fn get_barboza_events() -> Result<Response<Body>, Error> {
     let mut event_vec: Vec<Event> = Vec::new();
 
     for event in document.select(&event_content) {
-        let date = get_string_from_selector("div.date".into(), &event);
+        // let date = get_string_from_selector("div.date".into(), &event);
+        let mut date = get_string_from_attr("div.date".into(), &event, "aria-label".into());
+        let date_vec = date.split(" ").collect::<Vec<_>>();
+        let year: String = date_vec[2].into();
+        let month: String = date_vec[0].to_lowercase();
+        let month_num = month_lookup.get(&month as &str).unwrap_or(&"");
+        let day: String = date_vec[1].into();
+        date = format!("{year}-{month_num}-{day}");
         let headliner = get_string_from_selector("h3.title".into(), &event);
         let url = get_string_from_attr("h3.title > a".into(), &event, "href".into());
         let support_talent = get_string_from_selector("h4.tagline".into(), &event);
@@ -121,7 +136,7 @@ async fn get_barboza_events() -> Result<Response<Body>, Error> {
     Ok(resp)
 }
 
-async fn get_showbox_events() -> Result<Response<Body>, Error> {
+async fn get_showbox_events(month_lookup: HashMap<&str, &str>) -> Result<Response<Body>, Error> {
     // grap one selector to get how many events are there
     let mut event_vec: Vec<Event> = vec![];
     let client = reqwest::Client::new();
@@ -141,8 +156,12 @@ async fn get_showbox_events() -> Result<Response<Body>, Error> {
             }
             let mut date = get_string_from_selector("span.date".into(), &el);
             let date_vec = date.split(",").collect::<Vec<_>>();
-            date = date_vec[1].trim().into();
-            println!("Date: {}", date);
+            let year: String = date_vec[2].into();
+            let month_and_day = date_vec[1].trim().split(" ").collect::<Vec<_>>();
+            let month: String = month_and_day[0].to_lowercase();
+            let month_num = month_lookup.get(&month as &str).unwrap_or(&"");
+            let day: String = month_and_day[1].into();
+            date = format!("{year}-{month_num}-{day}");
             let new_event = Event {
                 date: date,
                 headliner: "".into(),
@@ -210,13 +229,40 @@ fn not_found() -> Result<Response<Body>, Error> {
 }
 
 async fn function_handler(_event: Request) -> Result<Response<Body>, Error> {
+    let month_lookup = HashMap::from([
+        ("jan", "1"),
+        ("january", "1"),
+        ("feb", "2"),
+        ("february", "2"),
+        ("mar", "3"),
+        ("march", "3"),
+        ("apr", "4"),
+        ("april", "4"),
+        ("may", "5"),
+        ("jun", "6"),
+        ("june", "6"),
+        ("jul", "7"),
+        ("july", "7"),
+        ("aug", "8"),
+        ("august", "8"),
+        ("sep", "9"),
+        ("sept", "9"),
+        ("september", "9"),
+        ("oct", "10"),
+        ("october", "10"),
+        ("nov", "11"),
+        ("november", "11"),
+        ("dec", "12"),
+        ("december", "12"),
+    ]);
+
     let uri = _event.query_string_parameters();
     let integration = uri.first("integration").unwrap_or("");
 
     let resp = match integration {
-        "corazon" => get_corazon_events().await?,
-        "barboza" => get_barboza_events().await?,
-        "showbox" => get_showbox_events().await?,
+        "corazon" => get_corazon_events(month_lookup).await?,
+        "barboza" => get_barboza_events(month_lookup).await?,
+        "showbox" => get_showbox_events(month_lookup).await?,
         _ => not_found()?,
     };
     Ok(resp)
