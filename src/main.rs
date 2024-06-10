@@ -35,6 +35,13 @@ fn get_string_from_attr(selector: String, document: &ElementRef, attribute: Stri
     option.unwrap_or_else(|| "".into()).to_owned()
 }
 
+fn zero_pad_num_string(n: String) -> String {
+    return match n.len() {
+        1 => format!("{}{}", "0", n),
+        _ => n,
+    }
+}
+
 async fn get_corazon_events(month_lookup: HashMap<&str, &str>) -> Result<Response<Body>, Error> {
     let response = reqwest::get("https://elcorazonseattle.com/")
         .await?
@@ -54,7 +61,7 @@ async fn get_corazon_events(month_lookup: HashMap<&str, &str>) -> Result<Respons
         let year: String = "2024".into();
         let month = date_vec[1].to_lowercase();
         let month_num = month_lookup.get(&month as &str).unwrap_or(&"");
-        let day: String = date_vec[2].into();
+        let day: String = zero_pad_num_string(date_vec[2].into());
         date = format!("{year}-{month_num}-{day}");
         let headliner = get_string_from_selector("p.headliners".into(), &event);
         let url = get_string_from_attr("p.event-title > a".into(), &event, "href".into());
@@ -104,7 +111,7 @@ async fn get_barboza_events(month_lookup: HashMap<&str, &str>) -> Result<Respons
         let year: String = date_vec[2].into();
         let month: String = date_vec[0].to_lowercase();
         let month_num = month_lookup.get(&month as &str).unwrap_or(&"");
-        let day: String = date_vec[1].into();
+        let day: String = zero_pad_num_string(date_vec[1].into());
         date = format!("{year}-{month_num}-{day}");
         let headliner = get_string_from_selector("h3.title".into(), &event);
         let url = get_string_from_attr("h3.title > a".into(), &event, "href".into());
@@ -160,7 +167,7 @@ async fn get_showbox_events(month_lookup: HashMap<&str, &str>) -> Result<Respons
             let month_and_day = date_vec[1].trim().split(" ").collect::<Vec<_>>();
             let month: String = month_and_day[0].to_lowercase();
             let month_num = month_lookup.get(&month as &str).unwrap_or(&"");
-            let day: String = month_and_day[1].into();
+            let day: String = zero_pad_num_string(month_and_day[1].into());
             date = format!("{year}-{month_num}-{day}");
             let new_event = Event {
                 date: date,
@@ -230,24 +237,24 @@ fn not_found() -> Result<Response<Body>, Error> {
 
 async fn function_handler(_event: Request) -> Result<Response<Body>, Error> {
     let month_lookup = HashMap::from([
-        ("jan", "1"),
-        ("january", "1"),
-        ("feb", "2"),
-        ("february", "2"),
-        ("mar", "3"),
-        ("march", "3"),
-        ("apr", "4"),
-        ("april", "4"),
-        ("may", "5"),
-        ("jun", "6"),
-        ("june", "6"),
-        ("jul", "7"),
-        ("july", "7"),
-        ("aug", "8"),
-        ("august", "8"),
-        ("sep", "9"),
-        ("sept", "9"),
-        ("september", "9"),
+        ("jan", "01"),
+        ("january", "01"),
+        ("feb", "02"),
+        ("february", "02"),
+        ("mar", "03"),
+        ("march", "03"),
+        ("apr", "04"),
+        ("april", "04"),
+        ("may", "05"),
+        ("jun", "06"),
+        ("june", "06"),
+        ("jul", "07"),
+        ("july", "07"),
+        ("aug", "08"),
+        ("august", "08"),
+        ("sep", "09"),
+        ("sept", "09"),
+        ("september", "09"),
         ("oct", "10"),
         ("october", "10"),
         ("nov", "11"),
@@ -258,6 +265,7 @@ async fn function_handler(_event: Request) -> Result<Response<Body>, Error> {
 
     let uri = _event.query_string_parameters();
     let integration = uri.first("integration").unwrap_or("");
+    let integration = "corazon";
 
     let resp = match integration {
         "corazon" => get_corazon_events(month_lookup).await?,
