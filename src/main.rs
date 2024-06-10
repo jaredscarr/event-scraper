@@ -265,7 +265,6 @@ async fn function_handler(_event: Request) -> Result<Response<Body>, Error> {
 
     let uri = _event.query_string_parameters();
     let integration = uri.first("integration").unwrap_or("");
-    let integration = "corazon";
 
     let resp = match integration {
         "corazon" => get_corazon_events(month_lookup).await?,
