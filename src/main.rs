@@ -108,7 +108,7 @@ async fn get_barboza_events(month_lookup: HashMap<&str, &str>) -> Result<Respons
         // let date = get_string_from_selector("div.date".into(), &event);
         let mut date = get_string_from_attr("div.date".into(), &event, "aria-label".into());
         let date_vec = date.split(" ").collect::<Vec<_>>();
-        let year: String = date_vec[2].into();
+        let year: String = date_vec[2].trim().into();
         let month: String = date_vec[0].to_lowercase();
         let month_num = month_lookup.get(&month as &str).unwrap_or(&"");
         let day: String = zero_pad_num_string(date_vec[1].into());
@@ -163,7 +163,7 @@ async fn get_showbox_events(month_lookup: HashMap<&str, &str>) -> Result<Respons
             }
             let mut date = get_string_from_selector("span.date".into(), &el);
             let date_vec = date.split(",").collect::<Vec<_>>();
-            let year: String = date_vec[2].into();
+            let year: String = date_vec[2].trim().into();
             let month_and_day = date_vec[1].trim().split(" ").collect::<Vec<_>>();
             let month: String = month_and_day[0].to_lowercase();
             let month_num = month_lookup.get(&month as &str).unwrap_or(&"");
